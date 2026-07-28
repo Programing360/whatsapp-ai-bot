@@ -21,6 +21,32 @@ console.log('[STARTUP] MONGODB_URI present:', !!process.env.MONGODB_URI);
 console.log('[STARTUP] GROQ_MODEL:', process.env.GROQ_MODEL || 'llama-3.3-70b-versatile (default)');
 console.log('[STARTUP] PUPPETEER_EXECUTABLE_PATH:', process.env.PUPPETEER_EXECUTABLE_PATH || '(not set — will use bundled Chromium)');
 // ─────────────────────────────────────────────────────────────────────────────
+const fs = require('fs');
+
+// Probe common Chromium binary locations — path varies by distro/install method
+function findChromium() {
+    const candidates = [
+        process.env.PUPPETEER_EXECUTABLE_PATH,
+        '/usr/bin/chromium',
+        '/usr/bin/chromium-browser',
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/google-chrome',
+        '/usr/local/bin/chromium',
+    ].filter(Boolean);
+
+    for (const p of candidates) {
+        try {
+            fs.accessSync(p, fs.constants.X_OK);
+            console.log(`[CHROMIUM] Found executable at: ${p}`);
+            return p;
+        } catch { /* not found, try next */ }
+    }
+    console.warn('[CHROMIUM] ⚠️  No system Chromium found — Puppeteer will try to use its bundled version.');
+    return undefined;
+}
+
+const CHROMIUM_PATH = findChromium();
+
 
 // WhatsApp connection state
 let currentQRDataURL = null;   // base64 PNG data URL of the latest QR code
@@ -115,12 +141,12 @@ mongoose.connect(mongoURI)
     .catch((err) => console.error('MongoDB connection error:', err.message));
 
 // Initialize WhatsApp Web client
+console.log('[PUPPETEER] Launching with executablePath:', CHROMIUM_PATH || '(bundled)');
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        // Use system Chromium installed by nixpacks.toml (avoids download in container)
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        executablePath: CHROMIUM_PATH,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -129,7 +155,12 @@ const client = new Client({
             '--no-first-run',
             '--no-zygote',
             '--single-process',
-            '--disable-gpu'
+            '--disable-gpu',
+            '--disable-extensions',
+            '--disable-background-networking',
+            '--disable-default-apps',
+            '--mute-audio',
+            '--no-default-browser-check'
         ]
     }
 });
