@@ -93,16 +93,8 @@ app.get('/status', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ Express HTTP server listening on 0.0.0.0:${PORT}`);
+    console.log(`   Routes: GET /  GET /qr  GET /status`);
     console.log(`   PORT env value: ${process.env.PORT || '(not set, using 3000)'}`);
-    // Print all registered routes so Deploy Logs confirm they loaded
-    const routes = [];
-    app._router.stack.forEach((middleware) => {
-        if (middleware.route) {
-            const methods = Object.keys(middleware.route.methods).join(', ').toUpperCase();
-            routes.push(`   ${methods.padEnd(6)} ${middleware.route.path}`);
-        }
-    });
-    console.log(`   Registered routes:\n${routes.join('\n')}`);
 });
 
 // Initialize Groq AI client
