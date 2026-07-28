@@ -1,9 +1,22 @@
 require('dotenv').config();
+const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const Groq = require('groq-sdk');
 const mongoose = require('mongoose');
 const Conversation = require('./models/Conversation');
+
+// Initialize Express server for Railway health check
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+    res.status(200).send('WhatsApp AI Bot is running!');
+});
+
+app.listen(PORT, () => {
+    console.log(`Express HTTP server listening on port ${PORT}`);
+});
 
 // Initialize Groq AI client
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
