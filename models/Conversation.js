@@ -17,7 +17,7 @@ const messageSchema = new mongoose.Schema({
 }, { _id: false });
 
 const conversationSchema = new mongoose.Schema({
-    phoneNumber: {
+    userId: {
         type: String,
         required: true,
         unique: true,
