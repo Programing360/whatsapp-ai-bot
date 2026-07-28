@@ -17,6 +17,7 @@
     "groq-sdk": "^1.4.0",
     "mongodb": "^7.5.0",
     "mongoose": "^9.8.0",
+    "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "whatsapp-web.js": "^1.34.7"
   }

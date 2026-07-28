@@ -2,20 +2,85 @@ require('dotenv').config();
 const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
 const Groq = require('groq-sdk');
 const mongoose = require('mongoose');
 const Conversation = require('./models/Conversation');
 
-// Initialize Express server for Railway health check
+// WhatsApp connection state
+let currentQRDataURL = null;   // base64 PNG data URL of the latest QR code
+let isClientReady = false;     // true once whatsapp-web.js fires 'ready'
+
+// Initialize Express server for Railway health check + QR viewer
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Health check
 app.get('/', (req, res) => {
     res.status(200).send('WhatsApp AI Bot is running!');
 });
 
+// QR Code viewer — displays a scannable QR image in the browser
+app.get('/qr', async (req, res) => {
+    if (isClientReady) {
+        return res.status(200).send(`
+            <!DOCTYPE html>
+            <html><head><title>WhatsApp Bot Status</title>
+            <style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f0f0f0;}
+            .box{background:#fff;padding:2rem 3rem;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.1);text-align:center;}
+            h2{color:#25d366;margin:0 0 .5rem} p{color:#555;margin:0}</style></head>
+            <body><div class='box'><h2>✅ Already Connected</h2><p>WhatsApp client is active and ready.</p></div></body></html>
+        `);
+    }
+
+    if (!currentQRDataURL) {
+        return res.status(202).send(`
+            <!DOCTYPE html>
+            <html><head><title>WhatsApp Bot — Waiting for QR</title>
+            <meta http-equiv='refresh' content='5'>
+            <style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f0f0f0;}
+            .box{background:#fff;padding:2rem 3rem;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.1);text-align:center;}
+            h2{color:#888;margin:0 0 .5rem} p{color:#777;margin:0 0 1rem} small{color:#aaa}</style></head>
+            <body><div class='box'><h2>⏳ Waiting for QR Code…</h2>
+            <p>The WhatsApp client is still initialising. This page refreshes every 5 seconds.</p>
+            <small>If it takes more than 30 seconds, check the container logs.</small></div></body></html>
+        `);
+    }
+
+    res.status(200).send(`
+        <!DOCTYPE html>
+        <html><head><title>Scan WhatsApp QR</title>
+        <meta http-equiv='refresh' content='30'>
+        <style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f0f0f0;}
+        .box{background:#fff;padding:2rem 2.5rem;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.1);text-align:center;max-width:380px;}
+        h2{color:#128c7e;margin:0 0 .25rem} p{color:#555;margin:0 0 1.25rem;font-size:.9rem}
+        img{width:280px;height:280px;border:1px solid #eee;border-radius:8px}
+        small{display:block;margin-top:1rem;color:#aaa;font-size:.8rem}</style></head>
+        <body><div class='box'>
+        <h2>📱 Scan with WhatsApp</h2>
+        <p>Open WhatsApp → Linked Devices → Link a Device</p>
+        <img src='${currentQRDataURL}' alt='WhatsApp QR Code' />
+        <small>Page auto-refreshes every 30 s. Reload if QR expires.</small>
+        </div></body></html>
+    `);
+});
+
+// Status endpoint — JSON
+app.get('/status', (req, res) => {
+    res.json({
+        status: isClientReady ? 'connected' : 'waiting_for_qr',
+        hasQR: !!currentQRDataURL,
+        message: isClientReady
+            ? 'WhatsApp client is connected and ready.'
+            : 'Waiting for QR code scan.'
+    });
+});
+
 app.listen(PORT, () => {
-    console.log(`Express HTTP server listening on port ${PORT}`);
+    console.log(`✅ Express HTTP server listening on port ${PORT}`);
+    console.log(`   Health:  http://localhost:${PORT}/`);
+    console.log(`   QR page: http://localhost:${PORT}/qr`);
+    console.log(`   Status:  http://localhost:${PORT}/status`);
 });
 
 // Initialize Groq AI client
@@ -52,25 +117,40 @@ const client = new Client({
     }
 });
 
-client.on('qr', (qr) => {
-    console.log('QR Code received, scan it below with WhatsApp:');
+client.on('qr', async (qr) => {
+    console.log('[QR] New QR code received — scan via /qr route or ASCII below:');
+    // ASCII fallback for local terminal
     qrcode.generate(qr, { small: true });
+    // Generate browser-viewable PNG data URL
+    try {
+        currentQRDataURL = await QRCode.toDataURL(qr, { margin: 2, width: 300 });
+        isClientReady = false;
+        console.log('[QR] Data URL generated — open /qr in your browser to scan.');
+    } catch (err) {
+        console.error('[QR] Failed to generate QR data URL:', err.message);
+    }
 });
 
 client.on('authenticated', () => {
-    console.log('Client authenticated successfully!');
+    console.log('[AUTH] WhatsApp client authenticated successfully!');
+    currentQRDataURL = null; // QR no longer needed after auth
 });
 
 client.on('auth_failure', (msg) => {
-    console.error('Authentication failure:', msg);
+    console.error('[AUTH] Authentication failure:', msg);
+    isClientReady = false;
 });
 
 client.on('ready', () => {
-    console.log('WhatsApp Web Client is ready!');
+    console.log('[READY] WhatsApp Web Client is ready and connected!');
+    isClientReady = true;
+    currentQRDataURL = null; // clear QR — no longer needed
 });
 
 client.on('disconnected', (reason) => {
-    console.log('Client was disconnected:', reason);
+    console.warn('[DISCONNECTED] WhatsApp client disconnected:', reason);
+    isClientReady = false;
+    currentQRDataURL = null;
 });
 
 // Helper: Save user message and fetch history from MongoDB (or fallback to memory)
