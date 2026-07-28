@@ -7,6 +7,21 @@ const Groq = require('groq-sdk');
 const mongoose = require('mongoose');
 const Conversation = require('./models/Conversation');
 
+// ── Startup env validation ───────────────────────────────────────────────────
+const REQUIRED_ENV = ['GROQ_API_KEY', 'MONGODB_URI'];
+const missingEnv = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missingEnv.length > 0) {
+    console.error(`[STARTUP] ⚠️  Missing required environment variables: ${missingEnv.join(', ')}`);
+    console.error('[STARTUP]    Set them in Railway dashboard → Variables tab.');
+    // Don't exit — Express server still starts so health check passes;
+    // WhatsApp client will fail gracefully when it tries to use them.
+}
+console.log('[STARTUP] GROQ_API_KEY present:', !!process.env.GROQ_API_KEY);
+console.log('[STARTUP] MONGODB_URI present:', !!process.env.MONGODB_URI);
+console.log('[STARTUP] GROQ_MODEL:', process.env.GROQ_MODEL || 'llama-3.3-70b-versatile (default)');
+console.log('[STARTUP] PUPPETEER_EXECUTABLE_PATH:', process.env.PUPPETEER_EXECUTABLE_PATH || '(not set — will use bundled Chromium)');
+// ─────────────────────────────────────────────────────────────────────────────
+
 // WhatsApp connection state
 let currentQRDataURL = null;   // base64 PNG data URL of the latest QR code
 let isClientReady = false;     // true once whatsapp-web.js fires 'ready'
@@ -112,6 +127,8 @@ const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
+        // Use system Chromium installed by nixpacks.toml (avoids download in container)
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -119,6 +136,7 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
+            '--single-process',
             '--disable-gpu'
         ]
     }
