@@ -7,6 +7,16 @@ const Groq = require('groq-sdk');
 const mongoose = require('mongoose');
 const Conversation = require('./models/Conversation');
 
+// ── Global Error & Promise Rejection Handlers ──────────────────────────────
+process.on('uncaughtException', (err) => {
+    console.error('[UNCAUGHT EXCEPTION] Process caught error:', err.stack || err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[UNHANDLED REJECTION] Unhandled Promise Rejection:', reason);
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── Startup env validation ───────────────────────────────────────────────────
 const REQUIRED_ENV = ['GROQ_API_KEY', 'MONGODB_URI'];
 const missingEnv = REQUIRED_ENV.filter(k => !process.env[k]);
@@ -152,9 +162,12 @@ mongoose.connect(mongoURI)
     .catch((err) => console.error('MongoDB connection error:', err.message));
 
 // Initialize WhatsApp Web client
+const SESSION_PATH = process.env.SESSION_DATA_PATH || './.wwebjs_auth';
+console.log('[AUTH] Session storage directory:', SESSION_PATH);
 console.log('[PUPPETEER] Launching with executablePath:', CHROMIUM_PATH || '(bundled)');
+
 const client = new Client({
-    authStrategy: new LocalAuth(),
+    authStrategy: new LocalAuth({ dataPath: SESSION_PATH }),
     puppeteer: {
         headless: true,
         executablePath: CHROMIUM_PATH,
@@ -206,11 +219,39 @@ client.on('ready', () => {
     currentQRDataURL = null; // clear QR — no longer needed
 });
 
+let isReconnecting = false;
+
+function scheduleAutoReconnect(delayMs = 10000) {
+    if (isReconnecting) return;
+    isReconnecting = true;
+    console.log(`[AUTO-RECONNECT] Scheduling client re-initialization in ${delayMs / 1000} seconds...`);
+    setTimeout(async () => {
+        try {
+            console.log('[AUTO-RECONNECT] Re-initializing WhatsApp client...');
+            await client.initialize();
+            console.log('[AUTO-RECONNECT] Client initialize call finished.');
+        } catch (err) {
+            console.error('[AUTO-RECONNECT ERROR] Failed to re-initialize client:', err.message);
+        } finally {
+            isReconnecting = false;
+        }
+    }, delayMs);
+}
+
 client.on('disconnected', (reason) => {
     console.warn('[DISCONNECTED] WhatsApp client disconnected:', reason);
     isClientReady = false;
     currentQRDataURL = null;
+    scheduleAutoReconnect(10000);
 });
+
+// ── Keep-Alive Heartbeat Logging (Every 5 minutes) ─────────────────────────
+setInterval(() => {
+    const rssMB = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    const mongoConnected = mongoose.connection.readyState === 1;
+    console.log(`[HEARTBEAT] Bot Status | Ready: ${isClientReady} | Mongo: ${mongoConnected} | RAM: ${rssMB}MB | Time: ${new Date().toISOString()}`);
+}, 5 * 60 * 1000);
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Helper: Save user message and fetch history from MongoDB (or fallback to memory)
 async function getHistoryAndSaveUserMsg(phoneNumber, userMessageContent) {
