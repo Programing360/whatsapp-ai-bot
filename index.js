@@ -22,26 +22,37 @@ console.log('[STARTUP] GROQ_MODEL:', process.env.GROQ_MODEL || 'llama-3.3-70b-ve
 console.log('[STARTUP] PUPPETEER_EXECUTABLE_PATH:', process.env.PUPPETEER_EXECUTABLE_PATH || '(not set — will use bundled Chromium)');
 // ─────────────────────────────────────────────────────────────────────────────
 const fs = require('fs');
+const { execSync } = require('child_process');
 
 // Probe common Chromium binary locations — path varies by distro/install method
 function findChromium() {
     const candidates = [
         process.env.PUPPETEER_EXECUTABLE_PATH,
-        '/usr/bin/chromium',
-        '/usr/bin/chromium-browser',
+        '/root/.nix-profile/bin/chromium',
+        '/nix/var/nix/profiles/default/bin/chromium',
         '/usr/bin/google-chrome-stable',
         '/usr/bin/google-chrome',
+        '/usr/bin/chromium',
+        '/usr/bin/chromium-browser',
         '/usr/local/bin/chromium',
     ].filter(Boolean);
 
     for (const p of candidates) {
         try {
             fs.accessSync(p, fs.constants.X_OK);
-            console.log(`[CHROMIUM] Found executable at: ${p}`);
-            return p;
-        } catch { /* not found, try next */ }
+            // Validate that it actually runs and isn't an Ubuntu snap stub script
+            const output = execSync(`"${p}" --version`, {
+                timeout: 3000,
+                stdio: ['ignore', 'pipe', 'pipe']
+            }).toString();
+
+            if (output.includes('Chromium') || output.includes('Chrome')) {
+                console.log(`[CHROMIUM] Validated executable at: ${p} (${output.trim()})`);
+                return p;
+            }
+        } catch { /* not executable, timed out, or snap stub error */ }
     }
-    console.warn('[CHROMIUM] ⚠️  No system Chromium found — Puppeteer will try to use its bundled version.');
+    console.warn('[CHROMIUM] ⚠️  No working system Chromium binary found — Puppeteer will try to use its bundled version.');
     return undefined;
 }
 
