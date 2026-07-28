@@ -1,6 +1,27 @@
 [phases.setup]
-# Install native standalone Chromium from Nixpkgs (avoids Ubuntu apt snap wrapper)
-nixPkgs = ["chromium"]
+# Install Node.js 18 and native non-snap Chromium via Nixpkgs, plus system libraries via apt
+nixPkgs = ["nodejs_18", "chromium"]
+aptPkgs = [
+  "fonts-liberation",
+  "fonts-noto-color-emoji",
+  "libasound2t64",
+  "libatk-bridge2.0-0",
+  "libatk1.0-0",
+  "libcups2",
+  "libdbus-1-3",
+  "libdrm2",
+  "libgbm1",
+  "libnspr4",
+  "libnss3",
+  "libx11-xcb1",
+  "libxcomposite1",
+  "libxdamage1",
+  "libxfixes3",
+  "libxrandr2",
+  "libxkbcommon0",
+  "xdg-utils",
+  "ca-certificates"
+]
 
 [variables]
 # Use Nix Chromium
