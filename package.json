@@ -1,11 +1,14 @@
 {
-  "name": "whatsapp-ai-bot",
+  "name": "facebook-messenger-ai-bot",
   "version": "1.0.0",
-  "description": "",
+  "description": "Facebook Messenger AI Bot powered by Groq AI and MongoDB",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "keywords": [],
   "author": "",

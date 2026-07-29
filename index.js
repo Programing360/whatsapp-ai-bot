@@ -1,4 +1,14 @@
-require('dotenv').config();
+// Ensure global crypto object is available for MongoDB driver & Web Crypto API
+if (typeof globalThis.crypto === 'undefined' || !globalThis.crypto.getRandomValues) {
+    try {
+        const crypto = require('crypto');
+        globalThis.crypto = crypto.webcrypto || crypto;
+    } catch (e) {
+        console.error('[CRYPTO SETUP ERROR]', e);
+    }
+}
+
+require('dotenv').config({ quiet: true });
 const express = require('express');
 const axios = require('axios');
 const Groq = require('groq-sdk');
@@ -48,7 +58,10 @@ if (mongoURI.startsWith('MONGODB_URI=')) {
 
 mongoose.connect(mongoURI)
     .then(() => console.log('[MongoDB] Connected successfully!'))
-    .catch((err) => console.error('[MongoDB Error]', err.message));
+    .catch((err) => {
+        console.error('[MongoDB Connection Error] Message:', err.message);
+        console.error('[MongoDB Connection Error] Full Stack Trace:\n', err.stack || err);
+    });
 
 // ── AI Toggle Helpers ────────────────────────────────────────────────────────
 async function getAIToggleStatus() {
