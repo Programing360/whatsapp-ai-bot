@@ -1,8 +1,13 @@
 // Ensure global crypto object is available for MongoDB driver & Web Crypto API
 if (typeof globalThis.crypto === 'undefined' || !globalThis.crypto.getRandomValues) {
     try {
-        const crypto = require('crypto');
-        globalThis.crypto = crypto.webcrypto || crypto;
+        const cryptoModule = require('crypto');
+        const cryptoObj = cryptoModule.webcrypto || cryptoModule;
+        Object.defineProperty(globalThis, 'crypto', {
+            value: cryptoObj,
+            configurable: true,
+            writable: true
+        });
     } catch (e) {
         console.error('[CRYPTO SETUP ERROR]', e);
     }
@@ -200,7 +205,7 @@ async function getHistoryAndSaveUserMsg(userId, userMessageContent) {
             );
             return conversation ? conversation.messages : [];
         } catch (dbErr) {
-            console.error('MongoDB error during user message save:', dbErr.message);
+            console.error('MongoDB error during user message save:', dbErr.stack || dbErr);
         }
     }
     return [];
@@ -222,7 +227,7 @@ async function saveAssistantMsg(userId, replyText) {
                 }
             );
         } catch (dbErr) {
-            console.error('MongoDB error during assistant message save:', dbErr.message);
+            console.error('MongoDB error during assistant message save:', dbErr.stack || dbErr);
         }
     }
 }
